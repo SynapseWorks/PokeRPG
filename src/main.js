@@ -47,7 +47,7 @@ class GameScene extends Phaser.Scene {
         const py = y * TILE;
         const key = `${x},${y}`;
 
-        let color = 0x66bb6a; // field
+        let color = 0x66bb6a;
 
         if (tile === "W") {
           color = 0x263238;
@@ -97,9 +97,7 @@ class GameScene extends Phaser.Scene {
   }
 
   update(time, delta) {
-    if (this.encounterCooldown > 0) {
-      this.encounterCooldown -= delta;
-    }
+    if (this.encounterCooldown > 0) this.encounterCooldown -= delta;
 
     if (!this.player.isMoving) {
       let dx = 0;
@@ -110,9 +108,7 @@ class GameScene extends Phaser.Scene {
       else if (this.cursors.up.isDown || this.wasd.W.isDown) dy = -1;
       else if (this.cursors.down.isDown || this.wasd.S.isDown) dy = 1;
 
-      if (dx !== 0 || dy !== 0) {
-        this.tryMove(dx, dy);
-      }
+      if (dx !== 0 || dy !== 0) this.tryMove(dx, dy);
     }
   }
 
@@ -147,11 +143,9 @@ class GameScene extends Phaser.Scene {
     const key = `${this.player.gridX},${this.player.gridY}`;
 
     if (this.grassTiles.has(key) && this.encounterCooldown <= 0) {
-      const roll = Math.random();
-
-      if (roll < 0.18) {
+      if (Math.random() < 0.18) {
         this.encounterCooldown = 1200;
-        this.flashMessage("A wild creature appeared!");
+        this.scene.start("BattleScene");
       }
     }
   }
@@ -165,6 +159,125 @@ class GameScene extends Phaser.Scene {
   }
 }
 
+class BattleScene extends Phaser.Scene {
+  constructor() {
+    super("BattleScene");
+  }
+
+  create() {
+    this.playerHP = 30;
+    this.enemyHP = 24;
+
+    this.add.rectangle(0, 0, 640, 480, 0x1a1a2e).setOrigin(0);
+
+    this.add.text(30, 24, "A wild Emberbun appeared!", {
+      fontFamily: "monospace",
+      fontSize: "22px",
+      color: "#ffffff"
+    });
+
+    this.enemy = this.add.rectangle(455, 135, 80, 80, 0xff6f61);
+    this.enemy.setStrokeStyle(4, 0xffffff);
+
+    this.hero = this.add.rectangle(170, 310, 90, 90, 0x7dd3fc);
+    this.hero.setStrokeStyle(4, 0xffffff);
+
+    this.enemyText = this.add.text(340, 210, "", {
+      fontFamily: "monospace",
+      fontSize: "18px",
+      color: "#ffffff"
+    });
+
+    this.playerText = this.add.text(60, 380, "", {
+      fontFamily: "monospace",
+      fontSize: "18px",
+      color: "#ffffff"
+    });
+
+    this.message = this.add.text(30, 420, "Choose: [F]ight or [R]un", {
+      fontFamily: "monospace",
+      fontSize: "18px",
+      color: "#ffffff",
+      backgroundColor: "#000000aa",
+      padding: { x: 10, y: 8 }
+    });
+
+    this.input.keyboard.on("keydown-F", () => this.fight());
+    this.input.keyboard.on("keydown-R", () => this.run());
+
+    this.updateHPText();
+  }
+
+  updateHPText() {
+    this.enemyText.setText(`Emberbun HP: ${this.enemyHP}/24`);
+    this.playerText.setText(`Sproutle HP: ${this.playerHP}/30`);
+  }
+
+  fight() {
+    const playerDamage = Phaser.Math.Between(5, 10);
+    this.enemyHP = Math.max(0, this.enemyHP - playerDamage);
+
+    this.message.setText(`Sproutle attacked! ${playerDamage} damage!`);
+    this.updateHPText();
+
+    this.tweens.add({
+      targets: this.enemy,
+      x: this.enemy.x + 10,
+      yoyo: true,
+      duration: 60,
+      repeat: 3
+    });
+
+    if (this.enemyHP <= 0) {
+      this.time.delayedCall(700, () => {
+        this.message.setText("Emberbun fainted! Returning to route...");
+      });
+
+      this.time.delayedCall(1600, () => {
+        this.scene.start("GameScene");
+      });
+
+      return;
+    }
+
+    this.time.delayedCall(800, () => this.enemyTurn());
+  }
+
+  enemyTurn() {
+    const enemyDamage = Phaser.Math.Between(3, 8);
+    this.playerHP = Math.max(0, this.playerHP - enemyDamage);
+
+    this.message.setText(`Emberbun tackled! ${enemyDamage} damage!`);
+    this.updateHPText();
+
+    this.tweens.add({
+      targets: this.hero,
+      x: this.hero.x - 10,
+      yoyo: true,
+      duration: 60,
+      repeat: 3
+    });
+
+    if (this.playerHP <= 0) {
+      this.time.delayedCall(900, () => {
+        this.message.setText("Sproutle fainted! Returning to route...");
+      });
+
+      this.time.delayedCall(1900, () => {
+        this.scene.start("GameScene");
+      });
+    }
+  }
+
+  run() {
+    this.message.setText("You ran away safely!");
+
+    this.time.delayedCall(900, () => {
+      this.scene.start("GameScene");
+    });
+  }
+}
+
 const config = {
   type: Phaser.AUTO,
   parent: "game",
@@ -172,7 +285,7 @@ const config = {
   height: 480,
   pixelArt: true,
   backgroundColor: "#000000",
-  scene: GameScene
+  scene: [GameScene, BattleScene]
 };
 
 new Phaser.Game(config);
