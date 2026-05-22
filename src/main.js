@@ -1,5 +1,5 @@
-// Monster League RPG - v9
-// Adds catching + saved party system.
+// Monster League RPG - v10
+// Adds full Party Menu: press P in overworld, click creature to make active, ESC to close.
 
 const TILE_SIZE = 32;
 const MAX_PARTY_SIZE = 6;
@@ -89,6 +89,10 @@ function loadGame() {
   }
 
   gameState.party = gameState.party.map(mon => createPartyMonster(mon));
+
+  if (gameState.party.length > 0) {
+    gameState.starter = gameState.party[0];
+  }
 
   saveGame();
 }
@@ -186,6 +190,7 @@ class OverworldScene extends Phaser.Scene {
 
     this.cursors = this.input.keyboard.createCursorKeys();
     this.keys = this.input.keyboard.addKeys("W,A,S,D");
+    this.partyKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.P);
 
     this.playerMoving = false;
     this.encounterCooldown = false;
@@ -301,9 +306,9 @@ class OverworldScene extends Phaser.Scene {
     this.infoText = this.add.text(
       12,
       12,
-      `${gameState.starter.name} Lv.${gameState.starter.level} | HP ${gameState.starter.currentHP}/${gameState.starter.maxHP} | XP ${gameState.starter.xp}/${gameState.starter.xpToNext} | Party ${gameState.party.length}/${MAX_PARTY_SIZE}`,
+      `${gameState.starter.name} Lv.${gameState.starter.level} | HP ${gameState.starter.currentHP}/${gameState.starter.maxHP} | XP ${gameState.starter.xp}/${gameState.starter.xpToNext} | Party ${gameState.party.length}/${MAX_PARTY_SIZE} | P: Party`,
       {
-        fontSize: "16px",
+        fontSize: "15px",
         color: "#ffffff",
         backgroundColor: "#000000cc",
         padding: { x: 8, y: 6 },
@@ -315,6 +320,12 @@ class OverworldScene extends Phaser.Scene {
   }
 
   update(time) {
+    if (Phaser.Input.Keyboard.JustDown(this.partyKey)) {
+      this.scene.pause();
+      this.scene.launch("PartyScene");
+      return;
+    }
+
     this.animateGrass(time);
     if (this.playerMoving) return;
 
@@ -377,13 +388,86 @@ class OverworldScene extends Phaser.Scene {
   }
 }
 
+class PartyScene extends Phaser.Scene {
+  constructor() {
+    super("PartyScene");
+  }
+
+  create() {
+    this.add.rectangle(0, 0, 640, 480, 0x101820, 0.96).setOrigin(0);
+
+    this.add.text(28, 24, "Party", {
+      fontSize: "32px",
+      color: "#ffffff",
+      fontFamily: "monospace"
+    });
+
+    this.add.text(28, 62, "Click a creature to make it active. ESC to close.", {
+      fontSize: "14px",
+      color: "#bbbbbb",
+      fontFamily: "monospace"
+    });
+
+    gameState.party.forEach((monster, index) => {
+      const y = 120 + index * 56;
+      const isActive = index === 0;
+
+      const bg = this.add.rectangle(320, y, 560, 46, isActive ? 0x264653 : 0x1f2937)
+        .setStrokeStyle(2, isActive ? 0x90e0ef : 0x555555)
+        .setInteractive({ useHandCursor: true });
+
+      this.add.rectangle(70, y, 28, 28, monster.color).setStrokeStyle(2, 0xffffff);
+
+      this.add.text(100, y - 14, `${monster.name}  Lv.${monster.level}`, {
+        fontSize: "18px",
+        color: "#ffffff",
+        fontFamily: "monospace"
+      });
+
+      this.add.text(100, y + 8, `HP ${monster.currentHP}/${monster.maxHP}   Type: ${monster.type}   XP ${monster.xp}/${monster.xpToNext}`, {
+        fontSize: "13px",
+        color: "#cccccc",
+        fontFamily: "monospace"
+      });
+
+      if (isActive) {
+        this.add.text(500, y - 10, "ACTIVE", {
+          fontSize: "16px",
+          color: "#90e0ef",
+          fontFamily: "monospace"
+        });
+      }
+
+      bg.on("pointerdown", () => {
+        if (index > 0) {
+          const selected = gameState.party[index];
+          gameState.party.splice(index, 1);
+          gameState.party.unshift(selected);
+        }
+
+        gameState.starter = gameState.party[0];
+        saveGame();
+
+        this.scene.stop();
+        this.scene.stop("OverworldScene");
+        this.scene.start("OverworldScene");
+      });
+    });
+
+    this.input.keyboard.on("keydown-ESC", () => {
+      this.scene.stop();
+      this.scene.resume("OverworldScene");
+    });
+  }
+}
+
 class BattleScene extends Phaser.Scene {
   constructor() {
     super("BattleScene");
   }
 
   create() {
-    this.playerMonster = gameState.starter;
+    this.playerMonster = gameState.party[0] || gameState.starter;
     this.enemyMonster = createPartyMonster({ ...Phaser.Utils.Array.GetRandom(WILD_MONSTERS) });
 
     this.playerHP = this.playerMonster.currentHP;
@@ -546,7 +630,7 @@ class BattleScene extends Phaser.Scene {
     const catchChance = Phaser.Math.Clamp(0.75 - hpRatio * 0.45, 0.25, 0.75);
     const caught = Math.random() < catchChance;
 
-    this.messageText.setText(`You threw a Capture Star...`);
+    this.messageText.setText("You threw a Capture Star...");
 
     this.tweens.add({
       targets: this.enemy,
@@ -590,8 +674,8 @@ class BattleScene extends Phaser.Scene {
 
     this.time.delayedCall(900, () => {
       this.playerMonster.currentHP = this.playerHP;
-      gameState.starter = this.playerMonster;
       gameState.party[0] = this.playerMonster;
+      gameState.starter = gameState.party[0];
       saveGame();
       this.scene.start("OverworldScene");
     });
@@ -615,8 +699,8 @@ class BattleScene extends Phaser.Scene {
     const damage = move.power + Phaser.Math.Between(0, 3);
     this.playerHP = Math.max(0, this.playerHP - damage);
     this.playerMonster.currentHP = this.playerHP;
-    gameState.starter = this.playerMonster;
     gameState.party[0] = this.playerMonster;
+    gameState.starter = gameState.party[0];
     saveGame();
 
     this.messageText.setText(`${this.enemyMonster.name} used ${move.name}!`);
@@ -637,8 +721,8 @@ class BattleScene extends Phaser.Scene {
 
       this.time.delayedCall(1900, () => {
         this.playerMonster.currentHP = this.playerMonster.maxHP;
-        gameState.starter = this.playerMonster;
         gameState.party[0] = this.playerMonster;
+        gameState.starter = gameState.party[0];
         gameState.playerX = 2;
         gameState.playerY = 2;
         saveGame();
@@ -675,8 +759,8 @@ class BattleScene extends Phaser.Scene {
         });
       }
 
-      gameState.starter = this.playerMonster;
       gameState.party[0] = this.playerMonster;
+      gameState.starter = gameState.party[0];
       saveGame();
     });
 
@@ -693,7 +777,13 @@ const config = {
   height: 480,
   pixelArt: true,
   backgroundColor: "#000000",
-  scene: [BootScene, StarterScene, OverworldScene, BattleScene]
+  scene: [
+    BootScene,
+    StarterScene,
+    OverworldScene,
+    BattleScene,
+    PartyScene
+  ]
 };
 
 new Phaser.Game(config);
