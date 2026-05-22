@@ -1,5 +1,5 @@
-// Monster League RPG - v5
-// Adds starter selection, saved game state, XP, and leveling.
+// Monster League RPG - v6
+// Visual upgrade: animated grass, water, pixel-style tiles/player, improved battle UI.
 
 const TILE_SIZE = 32;
 
@@ -67,12 +67,7 @@ class BootScene extends Phaser.Scene {
 
   create() {
     loadGame();
-
-    if (gameState.starter) {
-      this.scene.start("OverworldScene");
-    } else {
-      this.scene.start("StarterScene");
-    }
+    this.scene.start(gameState.starter ? "OverworldScene" : "StarterScene");
   }
 }
 
@@ -149,6 +144,7 @@ class OverworldScene extends Phaser.Scene {
   create() {
     this.blockedTiles = new Set();
     this.grassTiles = new Set();
+    this.animatedGrass = [];
 
     this.drawMap();
     this.createPlayer();
@@ -161,7 +157,7 @@ class OverworldScene extends Phaser.Scene {
     this.encounterCooldown = false;
 
     this.cameras.main.setBounds(0, 0, MAP[0].length * TILE_SIZE, MAP.length * TILE_SIZE);
-    this.cameras.main.startFollow(this.player);
+    this.cameras.main.startFollow(this.playerGroup);
   }
 
   drawMap() {
@@ -172,45 +168,107 @@ class OverworldScene extends Phaser.Scene {
         const py = y * TILE_SIZE;
         const key = `${x},${y}`;
 
-        let color = 0x66bb6a;
+        this.drawBaseTile(px, py, 0x69b96a);
 
         if (tile === "W") {
-          color = 0x263238;
           this.blockedTiles.add(key);
+          this.drawWaterTile(px, py);
+        }
+
+        if (tile === ".") {
+          this.drawPathDetails(px, py);
         }
 
         if (tile === "G") {
-          color = 0x2e7d32;
           this.grassTiles.add(key);
+          this.drawGrassTile(px, py);
         }
 
         if (tile === "T") {
-          color = 0x1b5e20;
           this.blockedTiles.add(key);
+          this.drawTreeTile(px, py);
         }
 
         if (tile === "B") {
-          color = 0x8d6e63;
           this.blockedTiles.add(key);
+          this.drawBuildingTile(px, py);
         }
-
-        this.add.rectangle(px, py, TILE_SIZE, TILE_SIZE, color)
-          .setOrigin(0)
-          .setStrokeStyle(1, 0x000000, 0.15);
       }
     }
   }
 
-  createPlayer() {
-    this.player = this.add.rectangle(
-      gameState.playerX * TILE_SIZE + TILE_SIZE / 2,
-      gameState.playerY * TILE_SIZE + TILE_SIZE / 2,
-      22,
-      26,
-      0xfff176
-    );
+  drawBaseTile(px, py, color) {
+    this.add.rectangle(px, py, TILE_SIZE, TILE_SIZE, color)
+      .setOrigin(0)
+      .setStrokeStyle(1, 0x000000, 0.10);
+  }
 
-    this.player.setStrokeStyle(3, 0x3e2723);
+  drawPathDetails(px, py) {
+    if (Math.random() < 0.25) {
+      this.add.rectangle(px + 7, py + 22, 4, 3, 0x4f9f56).setOrigin(0);
+    }
+
+    if (Math.random() < 0.2) {
+      this.add.rectangle(px + 21, py + 9, 3, 3, 0x7fd47e).setOrigin(0);
+    }
+  }
+
+  drawGrassTile(px, py) {
+    this.add.rectangle(px, py, TILE_SIZE, TILE_SIZE, 0x2e7d32).setOrigin(0);
+
+    const blades = [];
+
+    for (let i = 0; i < 7; i++) {
+      const blade = this.add.rectangle(
+        px + Phaser.Math.Between(4, 28),
+        py + Phaser.Math.Between(8, 27),
+        3,
+        Phaser.Math.Between(7, 12),
+        Phaser.Utils.Array.GetRandom([0x7ee36c, 0x47b94d, 0xa2ff7a])
+      ).setOrigin(0.5, 1);
+
+      blades.push(blade);
+    }
+
+    this.animatedGrass.push({ blades, offset: Math.random() * 1000 });
+  }
+
+  drawWaterTile(px, py) {
+    this.add.rectangle(px, py, TILE_SIZE, TILE_SIZE, 0x246b9f).setOrigin(0);
+    this.add.rectangle(px + 4, py + 9, 18, 3, 0x5dade2).setOrigin(0);
+    this.add.rectangle(px + 12, py + 21, 14, 3, 0x85c1e9).setOrigin(0);
+  }
+
+  drawTreeTile(px, py) {
+    this.add.rectangle(px, py, TILE_SIZE, TILE_SIZE, 0x4c9f50).setOrigin(0);
+    this.add.rectangle(px + 13, py + 15, 8, 15, 0x7b4f24).setOrigin(0);
+    this.add.rectangle(px + 5, py + 4, 22, 18, 0x145a32).setOrigin(0);
+    this.add.rectangle(px + 9, py, 16, 14, 0x1e8449).setOrigin(0);
+    this.add.rectangle(px + 13, py + 7, 6, 6, 0x58d68d).setOrigin(0);
+  }
+
+  drawBuildingTile(px, py) {
+    this.add.rectangle(px, py, TILE_SIZE, TILE_SIZE, 0xb06f3c).setOrigin(0);
+    this.add.rectangle(px + 2, py + 2, 28, 8, 0x6d2f1a).setOrigin(0);
+    this.add.rectangle(px + 7, py + 13, 7, 7, 0xadd8e6).setOrigin(0);
+    this.add.rectangle(px + 19, py + 13, 6, 14, 0x3e2723).setOrigin(0);
+  }
+
+  createPlayer() {
+    const x = gameState.playerX * TILE_SIZE + TILE_SIZE / 2;
+    const y = gameState.playerY * TILE_SIZE + TILE_SIZE / 2;
+
+    this.playerGroup = this.add.container(x, y);
+
+    const shadow = this.add.ellipse(0, 13, 21, 7, 0x000000, 0.28);
+    const legs = this.add.rectangle(0, 9, 14, 10, 0x263238);
+    const body = this.add.rectangle(0, -1, 18, 18, 0xfff176).setStrokeStyle(2, 0x3e2723);
+    const face = this.add.rectangle(0, -13, 16, 13, 0xffccbc).setStrokeStyle(2, 0x3e2723);
+    const hair = this.add.rectangle(0, -20, 18, 7, 0x5d4037);
+    const eye1 = this.add.rectangle(-4, -13, 2, 2, 0x000000);
+    const eye2 = this.add.rectangle(4, -13, 2, 2, 0x000000);
+
+    this.playerGroup.add([shadow, legs, body, face, hair, eye1, eye2]);
   }
 
   createUI() {
@@ -221,7 +279,7 @@ class OverworldScene extends Phaser.Scene {
       {
         fontSize: "16px",
         color: "#ffffff",
-        backgroundColor: "#000000aa",
+        backgroundColor: "#000000cc",
         padding: { x: 8, y: 6 },
         fontFamily: "monospace"
       }
@@ -230,7 +288,9 @@ class OverworldScene extends Phaser.Scene {
     this.infoText.setScrollFactor(0);
   }
 
-  update() {
+  update(time) {
+    this.animateGrass(time);
+
     if (this.playerMoving) return;
 
     let dx = 0;
@@ -242,6 +302,16 @@ class OverworldScene extends Phaser.Scene {
     else if (this.cursors.down.isDown || this.keys.S.isDown) dy = 1;
 
     if (dx !== 0 || dy !== 0) this.tryMove(dx, dy);
+  }
+
+  animateGrass(time) {
+    this.animatedGrass.forEach((patch) => {
+      const wave = Math.sin((time + patch.offset) / 250) * 0.08;
+
+      patch.blades.forEach((blade, i) => {
+        blade.rotation = wave + i * 0.015;
+      });
+    });
   }
 
   tryMove(dx, dy) {
@@ -258,7 +328,7 @@ class OverworldScene extends Phaser.Scene {
     this.playerMoving = true;
 
     this.tweens.add({
-      targets: this.player,
+      targets: this.playerGroup,
       x: nextX * TILE_SIZE + TILE_SIZE / 2,
       y: nextY * TILE_SIZE + TILE_SIZE / 2,
       duration: 140,
@@ -299,44 +369,105 @@ class BattleScene extends Phaser.Scene {
     this.enemyHP = this.enemyMonster.maxHP;
     this.battleLocked = false;
 
-    this.add.rectangle(0, 0, 640, 480, 0x1a1a2e).setOrigin(0);
+    this.drawBattleBackground();
+    this.createBattleSprites();
+    this.createBattleUI();
+
+    this.updateText();
+
+    this.input.keyboard.on("keydown-F", () => this.playerAttack());
+    this.input.keyboard.on("keydown-R", () => this.runAway());
+  }
+
+  drawBattleBackground() {
+    this.add.rectangle(0, 0, 640, 480, 0x101820).setOrigin(0);
+
+    this.add.rectangle(0, 0, 640, 185, 0x203a43).setOrigin(0);
+    this.add.rectangle(0, 185, 640, 170, 0x2f6b3f).setOrigin(0);
+    this.add.rectangle(0, 355, 640, 125, 0x111827).setOrigin(0);
+
+    this.add.ellipse(470, 210, 170, 46, 0x1f4f2b);
+    this.add.ellipse(180, 365, 190, 52, 0x1f4f2b);
+
+    for (let i = 0; i < 22; i++) {
+      this.add.rectangle(
+        Phaser.Math.Between(0, 640),
+        Phaser.Math.Between(190, 335),
+        Phaser.Math.Between(4, 10),
+        2,
+        0x76d275,
+        0.5
+      );
+    }
 
     this.add.text(30, 24, `A wild ${this.enemyMonster.name} appeared!`, {
       fontSize: "22px",
       color: "#ffffff",
       fontFamily: "monospace"
     });
+  }
 
-    this.enemy = this.add.rectangle(470, 150, 90, 90, this.enemyMonster.color)
-      .setStrokeStyle(4, 0xffffff);
+  createBattleSprites() {
+    this.enemy = this.add.container(470, 150);
+    this.enemy.add([
+      this.add.ellipse(0, 18, 80, 30, 0x000000, 0.22),
+      this.add.rectangle(0, 0, 78, 78, this.enemyMonster.color).setStrokeStyle(4, 0xffffff),
+      this.add.rectangle(-16, -12, 8, 8, 0x000000),
+      this.add.rectangle(16, -12, 8, 8, 0x000000),
+      this.add.rectangle(0, 13, 26, 5, 0x000000)
+    ]);
 
-    this.hero = this.add.rectangle(180, 320, 100, 100, this.playerMonster.color)
-      .setStrokeStyle(4, 0xffffff);
+    this.hero = this.add.container(180, 320);
+    this.hero.add([
+      this.add.ellipse(0, 25, 92, 34, 0x000000, 0.24),
+      this.add.rectangle(0, 0, 92, 92, this.playerMonster.color).setStrokeStyle(4, 0xffffff),
+      this.add.rectangle(-18, -12, 8, 8, 0x000000),
+      this.add.rectangle(18, -12, 8, 8, 0x000000),
+      this.add.rectangle(0, 16, 30, 6, 0x000000)
+    ]);
+  }
 
-    this.enemyText = this.add.text(350, 240, "", {
+  createBattleUI() {
+    this.add.rectangle(20, 360, 600, 100, 0xf8f8f8)
+      .setStrokeStyle(5, 0x111827);
+
+    this.messageText = this.add.text(38, 379, "Press F to Fight or R to Run", {
       fontSize: "18px",
-      color: "#ffffff",
+      color: "#111827",
+      fontFamily: "monospace",
+      wordWrap: { width: 360 }
+    });
+
+    this.add.rectangle(420, 374, 170, 70, 0xffffff)
+      .setStrokeStyle(3, 0x111827);
+
+    this.add.text(442, 386, "[F] FIGHT", {
+      fontSize: "18px",
+      color: "#111827",
       fontFamily: "monospace"
     });
 
-    this.playerText = this.add.text(40, 390, "", {
+    this.add.text(442, 416, "[R] RUN", {
       fontSize: "18px",
-      color: "#ffffff",
+      color: "#111827",
       fontFamily: "monospace"
     });
 
-    this.messageText = this.add.text(30, 430, "Press F to Fight or R to Run", {
+    this.enemyText = this.add.text(340, 235, "", {
       fontSize: "18px",
       color: "#ffffff",
-      backgroundColor: "#000000aa",
-      padding: { x: 10, y: 8 },
-      fontFamily: "monospace"
+      fontFamily: "monospace",
+      backgroundColor: "#00000099",
+      padding: { x: 8, y: 5 }
     });
 
-    this.updateText();
-
-    this.input.keyboard.on("keydown-F", () => this.playerAttack());
-    this.input.keyboard.on("keydown-R", () => this.runAway());
+    this.playerText = this.add.text(38, 332, "", {
+      fontSize: "18px",
+      color: "#ffffff",
+      fontFamily: "monospace",
+      backgroundColor: "#00000099",
+      padding: { x: 8, y: 5 }
+    });
   }
 
   updateText() {
