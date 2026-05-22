@@ -1,5 +1,17 @@
 const TILE_SIZE = 32;
 
+const STARTERS = [
+  { id: "sproutle", name: "Sproutle", type: "Leaf", color: 0x7ddf64, maxHP: 32, minDamage: 5, maxDamage: 10 },
+  { id: "emberbun", name: "Emberbun", type: "Flame", color: 0xff6f61, maxHP: 28, minDamage: 6, maxDamage: 11 },
+  { id: "bubblit", name: "Bubblit", type: "Water", color: 0x66ccff, maxHP: 35, minDamage: 4, maxDamage: 9 }
+];
+
+const WILD_MONSTERS = [
+  { name: "Mossling", type: "Leaf", color: 0x2ecc71, maxHP: 22, minDamage: 3, maxDamage: 7 },
+  { name: "Ashkit", type: "Flame", color: 0xff9f43, maxHP: 24, minDamage: 4, maxDamage: 8 },
+  { name: "Puddlefin", type: "Water", color: 0x48dbfb, maxHP: 26, minDamage: 3, maxDamage: 7 }
+];
+
 const MAP = [
   "WWWWWWWWWWWWWWWWWWWW",
   "W..................W",
@@ -20,8 +32,81 @@ const MAP = [
 
 const gameState = {
   playerX: 2,
-  playerY: 2
+  playerY: 2,
+  starter: null
 };
+
+function saveGame() {
+  localStorage.setItem("monsterLeagueSave", JSON.stringify(gameState));
+}
+
+function loadGame() {
+  const save = localStorage.getItem("monsterLeagueSave");
+  if (!save) return;
+
+  const loaded = JSON.parse(save);
+  gameState.playerX = loaded.playerX ?? 2;
+  gameState.playerY = loaded.playerY ?? 2;
+  gameState.starter = loaded.starter ?? null;
+}
+
+class StarterScene extends Phaser.Scene {
+  constructor() {
+    super("StarterScene");
+  }
+
+  create() {
+    this.add.rectangle(0, 0, 640, 480, 0x101820).setOrigin(0);
+
+    this.add.text(45, 35, "Choose Your First Creature", {
+      fontSize: "30px",
+      color: "#ffffff",
+      fontFamily: "monospace"
+    });
+
+    STARTERS.forEach((starter, index) => {
+      const x = 130 + index * 190;
+      const y = 210;
+
+      const card = this.add.rectangle(x, y, 145, 190, 0x1f2937)
+        .setStrokeStyle(3, starter.color)
+        .setInteractive({ useHandCursor: true });
+
+      this.add.rectangle(x, y - 45, 70, 70, starter.color)
+        .setStrokeStyle(4, 0xffffff);
+
+      this.add.text(x, y + 10, starter.name, {
+        fontSize: "18px",
+        color: "#ffffff",
+        fontFamily: "monospace"
+      }).setOrigin(0.5);
+
+      this.add.text(x, y + 38, starter.type, {
+        fontSize: "15px",
+        color: "#dddddd",
+        fontFamily: "monospace"
+      }).setOrigin(0.5);
+
+      this.add.text(x, y + 70, `Press ${index + 1}`, {
+        fontSize: "14px",
+        color: "#aaaaaa",
+        fontFamily: "monospace"
+      }).setOrigin(0.5);
+
+      card.on("pointerdown", () => this.chooseStarter(starter));
+    });
+
+    this.input.keyboard.on("keydown-ONE", () => this.chooseStarter(STARTERS[0]));
+    this.input.keyboard.on("keydown-TWO", () => this.chooseStarter(STARTERS[1]));
+    this.input.keyboard.on("keydown-THREE", () => this.chooseStarter(STARTERS[2]));
+  }
+
+  chooseStarter(starter) {
+    gameState.starter = { ...starter, level: 5, currentHP: starter.maxHP };
+    saveGame();
+    this.scene.start("OverworldScene");
+  }
+}
 
 class OverworldScene extends Phaser.Scene {
   constructor() {
@@ -42,27 +127,19 @@ class OverworldScene extends Phaser.Scene {
     this.playerMoving = false;
     this.encounterCooldown = false;
 
-    this.cameras.main.setBounds(
-      0,
-      0,
-      MAP[0].length * TILE_SIZE,
-      MAP.length * TILE_SIZE
-    );
-
+    this.cameras.main.setBounds(0, 0, MAP[0].length * TILE_SIZE, MAP.length * TILE_SIZE);
     this.cameras.main.startFollow(this.player);
   }
 
   drawMap() {
     for (let y = 0; y < MAP.length; y++) {
       for (let x = 0; x < MAP[y].length; x++) {
-
         const tile = MAP[y][x];
         const px = x * TILE_SIZE;
         const py = y * TILE_SIZE;
+        const key = `${x},${y}`;
 
         let color = 0x66bb6a;
-
-        const key = `${x},${y}`;
 
         if (tile === "W") {
           color = 0x263238;
@@ -84,15 +161,9 @@ class OverworldScene extends Phaser.Scene {
           this.blockedTiles.add(key);
         }
 
-        this.add.rectangle(
-          px,
-          py,
-          TILE_SIZE,
-          TILE_SIZE,
-          color
-        )
-        .setOrigin(0)
-        .setStrokeStyle(1, 0x000000, 0.15);
+        this.add.rectangle(px, py, TILE_SIZE, TILE_SIZE, color)
+          .setOrigin(0)
+          .setStrokeStyle(1, 0x000000, 0.15);
       }
     }
   }
@@ -110,20 +181,13 @@ class OverworldScene extends Phaser.Scene {
   }
 
   createUI() {
-    this.infoText = this.add.text(
-      12,
-      12,
-      "Move: WASD or Arrow Keys",
-      {
-        fontSize: "16px",
-        color: "#ffffff",
-        backgroundColor: "#000000aa",
-        padding: {
-          x: 8,
-          y: 6
-        }
-      }
-    );
+    this.infoText = this.add.text(12, 12, `${gameState.starter.name} follows you. Move: WASD / Arrows`, {
+      fontSize: "16px",
+      color: "#ffffff",
+      backgroundColor: "#000000aa",
+      padding: { x: 8, y: 6 },
+      fontFamily: "monospace"
+    });
 
     this.infoText.setScrollFactor(0);
   }
@@ -139,24 +203,19 @@ class OverworldScene extends Phaser.Scene {
     else if (this.cursors.up.isDown || this.keys.W.isDown) dy = -1;
     else if (this.cursors.down.isDown || this.keys.S.isDown) dy = 1;
 
-    if (dx !== 0 || dy !== 0) {
-      this.tryMove(dx, dy);
-    }
+    if (dx !== 0 || dy !== 0) this.tryMove(dx, dy);
   }
 
   tryMove(dx, dy) {
-
     const nextX = gameState.playerX + dx;
     const nextY = gameState.playerY + dy;
-
     const key = `${nextX},${nextY}`;
 
-    if (this.blockedTiles.has(key)) {
-      return;
-    }
+    if (this.blockedTiles.has(key)) return;
 
     gameState.playerX = nextX;
     gameState.playerY = nextY;
+    saveGame();
 
     this.playerMoving = true;
 
@@ -166,40 +225,24 @@ class OverworldScene extends Phaser.Scene {
       y: nextY * TILE_SIZE + TILE_SIZE / 2,
       duration: 140,
       onComplete: () => {
-
         this.playerMoving = false;
-
         this.checkEncounter();
       }
     });
   }
 
   checkEncounter() {
-
     if (this.encounterCooldown) return;
 
     const key = `${gameState.playerX},${gameState.playerY}`;
-
     if (!this.grassTiles.has(key)) return;
 
-    const roll = Math.random();
-
-    if (roll < 0.18) {
-
+    if (Math.random() < 0.18) {
       this.encounterCooldown = true;
-
       this.cameras.main.flash(300, 255, 255, 255);
 
       this.time.delayedCall(350, () => {
-
         this.scene.start("BattleScene");
-
-      });
-
-      this.time.delayedCall(1200, () => {
-
-        this.encounterCooldown = false;
-
       });
     }
   }
@@ -211,114 +254,67 @@ class BattleScene extends Phaser.Scene {
   }
 
   create() {
+    this.playerMonster = gameState.starter;
+    this.enemyMonster = { ...Phaser.Utils.Array.GetRandom(WILD_MONSTERS) };
 
-    this.playerHP = 30;
-    this.enemyHP = 24;
+    this.playerHP = this.playerMonster.currentHP;
+    this.enemyHP = this.enemyMonster.maxHP;
+    this.battleLocked = false;
 
-    this.add.rectangle(
-      0,
-      0,
-      640,
-      480,
-      0x1a1a2e
-    ).setOrigin(0);
+    this.add.rectangle(0, 0, 640, 480, 0x1a1a2e).setOrigin(0);
 
-    this.add.text(
-      30,
-      24,
-      "A wild Emberbun appeared!",
-      {
-        fontSize: "22px",
-        color: "#ffffff"
-      }
-    );
+    this.add.text(30, 24, `A wild ${this.enemyMonster.name} appeared!`, {
+      fontSize: "22px",
+      color: "#ffffff",
+      fontFamily: "monospace"
+    });
 
-    this.enemy = this.add.rectangle(
-      470,
-      150,
-      90,
-      90,
-      0xff6f61
-    );
+    this.enemy = this.add.rectangle(470, 150, 90, 90, this.enemyMonster.color)
+      .setStrokeStyle(4, 0xffffff);
 
-    this.enemy.setStrokeStyle(4, 0xffffff);
+    this.hero = this.add.rectangle(180, 320, 100, 100, this.playerMonster.color)
+      .setStrokeStyle(4, 0xffffff);
 
-    this.hero = this.add.rectangle(
-      180,
-      320,
-      100,
-      100,
-      0x7dd3fc
-    );
+    this.enemyText = this.add.text(350, 240, "", {
+      fontSize: "18px",
+      color: "#ffffff",
+      fontFamily: "monospace"
+    });
 
-    this.hero.setStrokeStyle(4, 0xffffff);
+    this.playerText = this.add.text(40, 390, "", {
+      fontSize: "18px",
+      color: "#ffffff",
+      fontFamily: "monospace"
+    });
 
-    this.enemyText = this.add.text(
-      350,
-      240,
-      "",
-      {
-        fontSize: "18px",
-        color: "#ffffff"
-      }
-    );
-
-    this.playerText = this.add.text(
-      40,
-      390,
-      "",
-      {
-        fontSize: "18px",
-        color: "#ffffff"
-      }
-    );
-
-    this.messageText = this.add.text(
-      30,
-      430,
-      "Press F to Fight or R to Run",
-      {
-        fontSize: "18px",
-        color: "#ffffff",
-        backgroundColor: "#000000aa",
-        padding: {
-          x: 10,
-          y: 8
-        }
-      }
-    );
+    this.messageText = this.add.text(30, 430, "Press F to Fight or R to Run", {
+      fontSize: "18px",
+      color: "#ffffff",
+      backgroundColor: "#000000aa",
+      padding: { x: 10, y: 8 },
+      fontFamily: "monospace"
+    });
 
     this.updateText();
 
-    this.input.keyboard.on("keydown-F", () => {
-      this.playerAttack();
-    });
-
-    this.input.keyboard.on("keydown-R", () => {
-      this.runAway();
-    });
+    this.input.keyboard.on("keydown-F", () => this.playerAttack());
+    this.input.keyboard.on("keydown-R", () => this.runAway());
   }
 
   updateText() {
-    this.enemyText.setText(`Emberbun HP: ${this.enemyHP}/24`);
-    this.playerText.setText(`Sproutle HP: ${this.playerHP}/30`);
+    this.enemyText.setText(`${this.enemyMonster.name} HP: ${this.enemyHP}/${this.enemyMonster.maxHP}`);
+    this.playerText.setText(`${this.playerMonster.name} HP: ${this.playerHP}/${this.playerMonster.maxHP}`);
   }
 
   playerAttack() {
+    if (this.battleLocked) return;
+    this.battleLocked = true;
 
-    const damage = Phaser.Math.Between(5, 10);
-
-    this.enemyHP -= damage;
-
-    if (this.enemyHP < 0) {
-      this.enemyHP = 0;
-    }
+    const damage = Phaser.Math.Between(this.playerMonster.minDamage, this.playerMonster.maxDamage);
+    this.enemyHP = Math.max(0, this.enemyHP - damage);
 
     this.updateText();
-
-    this.messageText.setText(
-      `Sproutle dealt ${damage} damage!`
-    );
+    this.messageText.setText(`${this.playerMonster.name} attacked! ${damage} damage!`);
 
     this.tweens.add({
       targets: this.enemy,
@@ -329,44 +325,28 @@ class BattleScene extends Phaser.Scene {
     });
 
     if (this.enemyHP <= 0) {
-
       this.time.delayedCall(900, () => {
-
-        this.messageText.setText(
-          "Enemy defeated!"
-        );
-
+        this.messageText.setText(`${this.enemyMonster.name} fainted!`);
       });
 
       this.time.delayedCall(1700, () => {
-
+        gameState.starter.currentHP = this.playerHP;
+        saveGame();
         this.scene.start("OverworldScene");
-
       });
 
       return;
     }
 
-    this.time.delayedCall(900, () => {
-      this.enemyAttack();
-    });
+    this.time.delayedCall(900, () => this.enemyAttack());
   }
 
   enemyAttack() {
-
-    const damage = Phaser.Math.Between(3, 7);
-
-    this.playerHP -= damage;
-
-    if (this.playerHP < 0) {
-      this.playerHP = 0;
-    }
+    const damage = Phaser.Math.Between(this.enemyMonster.minDamage, this.enemyMonster.maxDamage);
+    this.playerHP = Math.max(0, this.playerHP - damage);
 
     this.updateText();
-
-    this.messageText.setText(
-      `Emberbun dealt ${damage} damage!`
-    );
+    this.messageText.setText(`${this.enemyMonster.name} attacked! ${damage} damage!`);
 
     this.tweens.add({
       targets: this.hero,
@@ -377,34 +357,54 @@ class BattleScene extends Phaser.Scene {
     });
 
     if (this.playerHP <= 0) {
-
       this.time.delayedCall(900, () => {
-
-        this.messageText.setText(
-          "You fainted!"
-        );
-
+        this.messageText.setText(`${this.playerMonster.name} fainted! Resting...`);
       });
 
-      this.time.delayedCall(1700, () => {
-
+      this.time.delayedCall(1900, () => {
+        gameState.starter.currentHP = gameState.starter.maxHP;
+        gameState.playerX = 2;
+        gameState.playerY = 2;
+        saveGame();
         this.scene.start("OverworldScene");
-
       });
+
+      return;
     }
+
+    this.time.delayedCall(500, () => {
+      this.battleLocked = false;
+      this.messageText.setText("Press F to Fight or R to Run");
+    });
   }
 
   runAway() {
+    if (this.battleLocked) return;
+    this.battleLocked = true;
 
-    this.messageText.setText(
-      "You ran away safely!"
-    );
+    this.messageText.setText("You ran away safely!");
 
     this.time.delayedCall(1000, () => {
-
+      gameState.starter.currentHP = this.playerHP;
+      saveGame();
       this.scene.start("OverworldScene");
-
     });
+  }
+}
+
+class BootScene extends Phaser.Scene {
+  constructor() {
+    super("BootScene");
+  }
+
+  create() {
+    loadGame();
+
+    if (gameState.starter) {
+      this.scene.start("OverworldScene");
+    } else {
+      this.scene.start("StarterScene");
+    }
   }
 }
 
@@ -415,10 +415,7 @@ const config = {
   height: 480,
   pixelArt: true,
   backgroundColor: "#000000",
-  scene: [
-    OverworldScene,
-    BattleScene
-  ]
+  scene: [BootScene, StarterScene, OverworldScene, BattleScene]
 };
 
 new Phaser.Game(config);
