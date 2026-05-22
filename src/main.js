@@ -179,26 +179,27 @@ class OverworldScene extends Phaser.Scene {
     super("OverworldScene");
   }
 
-  create() {
-    this.blockedTiles = new Set();
-    this.grassTiles = new Set();
-    this.animatedGrass = [];
+create() {
+  this.blockedTiles = new Set();
+  this.grassTiles = new Set();
+  this.healTiles = new Set();
+  this.animatedGrass = [];
 
-    this.drawMap();
-    this.createPlayer();
-    this.createUI();
+  this.drawMap();
+  this.createPlayer();
+  this.createUI();
 
-    this.cursors = this.input.keyboard.createCursorKeys();
-    this.keys = this.input.keyboard.addKeys("W,A,S,D");
-    this.partyKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.P);
-    this.interactKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.E);
-    this.healTiles = new Set();
-    this.playerMoving = false;
-    this.encounterCooldown = false;
+  this.cursors = this.input.keyboard.createCursorKeys();
+  this.keys = this.input.keyboard.addKeys("W,A,S,D");
+  this.partyKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.P);
+  this.interactKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.E);
 
-    this.cameras.main.setBounds(0, 0, MAP[0].length * TILE_SIZE, MAP.length * TILE_SIZE);
-    this.cameras.main.startFollow(this.playerGroup);
-  }
+  this.playerMoving = false;
+  this.encounterCooldown = false;
+
+  this.cameras.main.setBounds(0, 0, MAP[0].length * TILE_SIZE, MAP.length * TILE_SIZE);
+  this.cameras.main.startFollow(this.playerGroup);
+}
 
   drawMap() {
     for (let y = 0; y < MAP.length; y++) {
