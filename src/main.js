@@ -179,35 +179,29 @@ class OverworldScene extends Phaser.Scene {
     super("OverworldScene");
   }
 
-create() {
-  this.blockedTiles = new Set();
-  this.grassTiles = new Set();
-  this.healTiles = new Set();
-  this.animatedGrass = [];
+  create() {
+    this.blockedTiles = new Set();
+    this.grassTiles = new Set();
+    this.healTiles = new Set();
+    this.animatedGrass = [];
 
-  this.drawMap();
-  this.createPlayer();
-  this.createUI();
+    this.drawMap();
+    this.createPlayer();
+    this.createUI();
 
-  this.cursors = this.input.keyboard.createCursorKeys();
-  this.keys = this.input.keyboard.addKeys("W,A,S,D");
-  this.partyKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.P);
-  this.interactKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.E);
+    this.cursors = this.input.keyboard.createCursorKeys();
+    this.keys = this.input.keyboard.addKeys("W,A,S,D");
+    this.partyKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.P);
+    this.interactKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.E);
 
-  this.playerMoving = false;
-  this.encounterCooldown = false;
+    this.playerMoving = false;
+    this.encounterCooldown = false;
 
-  this.cameras.main.setBounds(0, 0, MAP[0].length * TILE_SIZE, MAP.length * TILE_SIZE);
-  this.cameras.main.startFollow(this.playerGroup);
-}
+    this.cameras.main.setBounds(0, 0, MAP[0].length * TILE_SIZE, MAP.length * TILE_SIZE);
+    this.cameras.main.startFollow(this.playerGroup);
+  }
 
   drawMap() {
-
-  if (!this.blockedTiles) this.blockedTiles = new Set();
-  if (!this.grassTiles) this.grassTiles = new Set();
-  if (!this.healTiles) this.healTiles = new Set();
-
-  for (let y = 0; y < MAP.length; y++) {
     for (let y = 0; y < MAP.length; y++) {
       for (let x = 0; x < MAP[y].length; x++) {
         const tile = MAP[y][x];
@@ -238,6 +232,7 @@ create() {
           this.blockedTiles.add(key);
           this.drawBuildingTile(px, py);
         }
+
         if (tile === "H") {
           this.blockedTiles.add(key);
           this.healTiles.add(key);
@@ -252,14 +247,15 @@ create() {
       .setOrigin(0)
       .setStrokeStyle(1, 0x000000, 0.1);
   }
+
   drawHealingCenterTile(px, py) {
-  this.add.rectangle(px, py, TILE_SIZE, TILE_SIZE, 0xf8f8f8).setOrigin(0);
-  this.add.rectangle(px + 2, py + 2, 28, 8, 0xe63946).setOrigin(0);
-  this.add.rectangle(px + 7, py + 13, 7, 7, 0xadd8e6).setOrigin(0);
-  this.add.rectangle(px + 19, py + 13, 6, 14, 0x3e2723).setOrigin(0);
-  this.add.rectangle(px + 12, py + 12, 8, 3, 0xe63946).setOrigin(0);
-  this.add.rectangle(px + 14, py + 9, 3, 8, 0xe63946).setOrigin(0);
-}
+    this.add.rectangle(px, py, TILE_SIZE, TILE_SIZE, 0xf8f8f8).setOrigin(0);
+    this.add.rectangle(px + 2, py + 2, 28, 8, 0xe63946).setOrigin(0);
+    this.add.rectangle(px + 7, py + 13, 7, 7, 0xadd8e6).setOrigin(0);
+    this.add.rectangle(px + 19, py + 13, 6, 14, 0x3e2723).setOrigin(0);
+    this.add.rectangle(px + 12, py + 12, 8, 3, 0xe63946).setOrigin(0);
+    this.add.rectangle(px + 14, py + 9, 3, 8, 0xe63946).setOrigin(0);
+  }
 
   drawPathDetails(px, py) {
     if (Math.random() < 0.25) this.add.rectangle(px + 7, py + 22, 4, 3, 0x4f9f56).setOrigin(0);
@@ -284,59 +280,7 @@ create() {
 
     this.animatedGrass.push({ blades, offset: Math.random() * 1000 });
   }
-tryInteract() {
-  const adjacentTiles = [
-    `${gameState.playerX},${gameState.playerY - 1}`,
-    `${gameState.playerX},${gameState.playerY + 1}`,
-    `${gameState.playerX - 1},${gameState.playerY}`,
-    `${gameState.playerX + 1},${gameState.playerY}`
-  ];
 
-  const nearHealingCenter = adjacentTiles.some(tile => this.healTiles.has(tile));
-
-  if (nearHealingCenter) {
-    this.healParty();
-  } else {
-    this.showMessage("Nothing to interact with.");
-  }
-}
-
-healParty() {
-  gameState.party = gameState.party.map(monster => ({
-    ...monster,
-    currentHP: monster.maxHP
-  }));
-
-  gameState.starter = gameState.party[0];
-
-  saveGame();
-
-  this.showMessage("Your party was fully healed!");
-  this.infoText.setText(
-    `${gameState.starter.name} Lv.${gameState.starter.level} | HP ${gameState.starter.currentHP}/${gameState.starter.maxHP} | XP ${gameState.starter.xp}/${gameState.starter.xpToNext} | Party ${gameState.party.length}/${MAX_PARTY_SIZE} | P: Party | E: Interact`
-  );
-}
-
-showMessage(message) {
-  if (this.messageText) this.messageText.destroy();
-
-  this.messageText = this.add.text(12, 440, message, {
-    fontSize: "16px",
-    color: "#ffffff",
-    backgroundColor: "#000000dd",
-    padding: { x: 10, y: 7 },
-    fontFamily: "monospace"
-  });
-
-  this.messageText.setScrollFactor(0);
-
-  this.time.delayedCall(1500, () => {
-    if (this.messageText) {
-      this.messageText.destroy();
-      this.messageText = null;
-    }
-  });
-}
   drawWaterTile(px, py) {
     this.add.rectangle(px, py, TILE_SIZE, TILE_SIZE, 0x246b9f).setOrigin(0);
     this.add.rectangle(px + 4, py + 9, 18, 3, 0x5dade2).setOrigin(0);
@@ -379,7 +323,7 @@ showMessage(message) {
     this.infoText = this.add.text(
       12,
       12,
-      `${gameState.starter.name} Lv.${gameState.starter.level} | HP ${gameState.starter.currentHP}/${gameState.starter.maxHP} | XP ${gameState.starter.xp}/${gameState.starter.xpToNext} | Party ${gameState.party.length}/${MAX_PARTY_SIZE} | P: Party| Party ${gameState.party.length}/${MAX_PARTY_SIZE} | P: Party | E: Interact`,
+      `${gameState.starter.name} Lv.${gameState.starter.level} | HP ${gameState.starter.currentHP}/${gameState.starter.maxHP} | XP ${gameState.starter.xp}/${gameState.starter.xpToNext} | Party ${gameState.party.length}/${MAX_PARTY_SIZE} | P: Party | E: Interact`,
       {
         fontSize: "15px",
         color: "#ffffff",
@@ -398,6 +342,7 @@ showMessage(message) {
       this.scene.launch("PartyScene");
       return;
     }
+
     if (Phaser.Input.Keyboard.JustDown(this.interactKey)) {
       this.tryInteract();
       return;
@@ -447,6 +392,60 @@ showMessage(message) {
       onComplete: () => {
         this.playerMoving = false;
         this.checkEncounter();
+      }
+    });
+  }
+
+  tryInteract() {
+    const adjacentTiles = [
+      `${gameState.playerX},${gameState.playerY - 1}`,
+      `${gameState.playerX},${gameState.playerY + 1}`,
+      `${gameState.playerX - 1},${gameState.playerY}`,
+      `${gameState.playerX + 1},${gameState.playerY}`
+    ];
+
+    const nearHealingCenter = adjacentTiles.some(tile => this.healTiles.has(tile));
+
+    if (nearHealingCenter) {
+      this.healParty();
+    } else {
+      this.showMessage("Nothing to interact with.");
+    }
+  }
+
+  healParty() {
+    gameState.party = gameState.party.map(monster => ({
+      ...monster,
+      currentHP: monster.maxHP
+    }));
+
+    gameState.starter = gameState.party[0];
+    saveGame();
+
+    this.showMessage("Your party was fully healed!");
+
+    this.infoText.setText(
+      `${gameState.starter.name} Lv.${gameState.starter.level} | HP ${gameState.starter.currentHP}/${gameState.starter.maxHP} | XP ${gameState.starter.xp}/${gameState.starter.xpToNext} | Party ${gameState.party.length}/${MAX_PARTY_SIZE} | P: Party | E: Interact`
+    );
+  }
+
+  showMessage(message) {
+    if (this.messageText) this.messageText.destroy();
+
+    this.messageText = this.add.text(12, 440, message, {
+      fontSize: "16px",
+      color: "#ffffff",
+      backgroundColor: "#000000dd",
+      padding: { x: 10, y: 7 },
+      fontFamily: "monospace"
+    });
+
+    this.messageText.setScrollFactor(0);
+
+    this.time.delayedCall(1500, () => {
+      if (this.messageText) {
+        this.messageText.destroy();
+        this.messageText = null;
       }
     });
   }
