@@ -1,7 +1,8 @@
-// Monster League RPG - v8
-// Recombined: v6 visuals + v7 move system + save compatibility fixes.
+// Monster League RPG - v9
+// Adds catching + saved party system.
 
 const TILE_SIZE = 32;
+const MAX_PARTY_SIZE = 6;
 
 const MOVES = {
   leafJab: { name: "Leaf Jab", type: "Leaf", power: 8, accuracy: 0.95 },
@@ -20,9 +21,9 @@ const STARTERS = [
 ];
 
 const WILD_MONSTERS = [
-  { name: "Mossling", type: "Leaf", color: 0x2ecc71, maxHP: 24, level: 3, moves: ["leafJab", "tackle"] },
-  { name: "Ashkit", type: "Flame", color: 0xff9f43, maxHP: 22, level: 4, moves: ["ember", "tackle"] },
-  { name: "Puddlefin", type: "Water", color: 0x48dbfb, maxHP: 26, level: 3, moves: ["splash", "tackle"] }
+  { id: "mossling", name: "Mossling", type: "Leaf", color: 0x2ecc71, maxHP: 24, level: 3, moves: ["leafJab", "tackle"] },
+  { id: "ashkit", name: "Ashkit", type: "Flame", color: 0xff9f43, maxHP: 22, level: 4, moves: ["ember", "tackle"] },
+  { id: "puddlefin", name: "Puddlefin", type: "Water", color: 0x48dbfb, maxHP: 26, level: 3, moves: ["splash", "tackle"] }
 ];
 
 const MAP = [
@@ -46,11 +47,23 @@ const MAP = [
 const gameState = {
   playerX: 2,
   playerY: 2,
-  starter: null
+  starter: null,
+  party: []
 };
 
 function saveGame() {
   localStorage.setItem("monsterLeagueSave", JSON.stringify(gameState));
+}
+
+function createPartyMonster(monster) {
+  return {
+    ...monster,
+    level: monster.level || 5,
+    xp: monster.xp ?? 0,
+    xpToNext: monster.xpToNext ?? 20,
+    currentHP: monster.currentHP ?? monster.maxHP,
+    moves: monster.moves || ["tackle"]
+  };
 }
 
 function loadGame() {
@@ -62,18 +75,22 @@ function loadGame() {
   if (gameState.starter) {
     const base = STARTERS.find(s => s.id === gameState.starter.id);
 
-    gameState.starter = {
+    gameState.starter = createPartyMonster({
       ...base,
       ...gameState.starter,
-      moves: gameState.starter.moves || base?.moves || ["tackle"],
-      level: gameState.starter.level || 5,
-      xp: gameState.starter.xp ?? 0,
-      xpToNext: gameState.starter.xpToNext ?? 20,
-      currentHP: gameState.starter.currentHP ?? gameState.starter.maxHP
-    };
-
-    saveGame();
+      moves: gameState.starter.moves || base?.moves || ["tackle"]
+    });
   }
+
+  if (!Array.isArray(gameState.party)) gameState.party = [];
+
+  if (gameState.starter && gameState.party.length === 0) {
+    gameState.party = [gameState.starter];
+  }
+
+  gameState.party = gameState.party.map(mon => createPartyMonster(mon));
+
+  saveGame();
 }
 
 class BootScene extends Phaser.Scene {
@@ -109,8 +126,7 @@ class StarterScene extends Phaser.Scene {
         .setStrokeStyle(3, starter.color)
         .setInteractive({ useHandCursor: true });
 
-      this.add.rectangle(x, y - 45, 70, 70, starter.color)
-        .setStrokeStyle(4, 0xffffff);
+      this.add.rectangle(x, y - 45, 70, 70, starter.color).setStrokeStyle(4, 0xffffff);
 
       this.add.text(x, y + 10, starter.name, {
         fontSize: "18px",
@@ -139,13 +155,15 @@ class StarterScene extends Phaser.Scene {
   }
 
   chooseStarter(starter) {
-    gameState.starter = {
+    gameState.starter = createPartyMonster({
       ...starter,
       level: 5,
       xp: 0,
       xpToNext: 20,
       currentHP: starter.maxHP
-    };
+    });
+
+    gameState.party = [gameState.starter];
 
     saveGame();
     this.scene.start("OverworldScene");
@@ -224,7 +242,6 @@ class OverworldScene extends Phaser.Scene {
 
   drawGrassTile(px, py) {
     this.add.rectangle(px, py, TILE_SIZE, TILE_SIZE, 0x2e7d32).setOrigin(0);
-
     const blades = [];
 
     for (let i = 0; i < 7; i++) {
@@ -284,7 +301,7 @@ class OverworldScene extends Phaser.Scene {
     this.infoText = this.add.text(
       12,
       12,
-      `${gameState.starter.name} Lv.${gameState.starter.level} | HP ${gameState.starter.currentHP}/${gameState.starter.maxHP} | XP ${gameState.starter.xp}/${gameState.starter.xpToNext}`,
+      `${gameState.starter.name} Lv.${gameState.starter.level} | HP ${gameState.starter.currentHP}/${gameState.starter.maxHP} | XP ${gameState.starter.xp}/${gameState.starter.xpToNext} | Party ${gameState.party.length}/${MAX_PARTY_SIZE}`,
       {
         fontSize: "16px",
         color: "#ffffff",
@@ -299,7 +316,6 @@ class OverworldScene extends Phaser.Scene {
 
   update(time) {
     this.animateGrass(time);
-
     if (this.playerMoving) return;
 
     let dx = 0;
@@ -356,10 +372,7 @@ class OverworldScene extends Phaser.Scene {
     if (Math.random() < 0.18) {
       this.encounterCooldown = true;
       this.cameras.main.flash(300, 255, 255, 255);
-
-      this.time.delayedCall(350, () => {
-        this.scene.start("BattleScene");
-      });
+      this.time.delayedCall(350, () => this.scene.start("BattleScene"));
     }
   }
 }
@@ -371,7 +384,7 @@ class BattleScene extends Phaser.Scene {
 
   create() {
     this.playerMonster = gameState.starter;
-    this.enemyMonster = { ...Phaser.Utils.Array.GetRandom(WILD_MONSTERS) };
+    this.enemyMonster = createPartyMonster({ ...Phaser.Utils.Array.GetRandom(WILD_MONSTERS) });
 
     this.playerHP = this.playerMonster.currentHP;
     this.enemyHP = this.enemyMonster.maxHP;
@@ -424,10 +437,10 @@ class BattleScene extends Phaser.Scene {
       .setStrokeStyle(5, 0x111827);
 
     this.messageText = this.add.text(38, 379, "Choose a move:", {
-      fontSize: "18px",
+      fontSize: "17px",
       color: "#111827",
       fontFamily: "monospace",
-      wordWrap: { width: 300 }
+      wordWrap: { width: 290 }
     });
 
     this.enemyText = this.add.text(340, 235, "", {
@@ -447,29 +460,37 @@ class BattleScene extends Phaser.Scene {
     });
 
     this.createMoveButtons();
+    this.createActionButtons();
   }
 
   createMoveButtons() {
     this.playerMonster.moves.forEach((moveKey, index) => {
       const move = MOVES[moveKey];
-
       const x = 405 + (index % 2) * 105;
-      const y = 386 + Math.floor(index / 2) * 42;
+      const y = 384 + Math.floor(index / 2) * 37;
 
-      const button = this.add.rectangle(x, y, 100, 34, 0xffffff)
-        .setStrokeStyle(2, 0x111827)
-        .setInteractive({ useHandCursor: true });
-
-      const label = this.add.text(x, y, move.name, {
-        fontSize: "12px",
-        color: "#111827",
-        fontFamily: "monospace"
-      }).setOrigin(0.5);
-
-      button.on("pointerdown", () => this.usePlayerMove(moveKey));
-      label.setInteractive({ useHandCursor: true });
-      label.on("pointerdown", () => this.usePlayerMove(moveKey));
+      this.makeButton(x, y, 100, 30, move.name, () => this.usePlayerMove(moveKey), 12);
     });
+  }
+
+  createActionButtons() {
+    this.makeButton(405, 438, 100, 28, "CATCH", () => this.tryCatch(), 12);
+    this.makeButton(510, 438, 100, 28, "RUN", () => this.runAway(), 12);
+  }
+
+  makeButton(x, y, w, h, text, callback, size = 14) {
+    const button = this.add.rectangle(x, y, w, h, 0xffffff)
+      .setStrokeStyle(2, 0x111827)
+      .setInteractive({ useHandCursor: true });
+
+    const label = this.add.text(x, y, text, {
+      fontSize: `${size}px`,
+      color: "#111827",
+      fontFamily: "monospace"
+    }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+
+    button.on("pointerdown", callback);
+    label.on("pointerdown", callback);
   }
 
   updateText() {
@@ -511,6 +532,71 @@ class BattleScene extends Phaser.Scene {
     this.time.delayedCall(900, () => this.enemyTurn());
   }
 
+  tryCatch() {
+    if (this.turnLocked) return;
+    this.turnLocked = true;
+
+    if (gameState.party.length >= MAX_PARTY_SIZE) {
+      this.messageText.setText("Your party is full!");
+      this.time.delayedCall(900, () => this.enemyTurn());
+      return;
+    }
+
+    const hpRatio = this.enemyHP / this.enemyMonster.maxHP;
+    const catchChance = Phaser.Math.Clamp(0.75 - hpRatio * 0.45, 0.25, 0.75);
+    const caught = Math.random() < catchChance;
+
+    this.messageText.setText(`You threw a Capture Star...`);
+
+    this.tweens.add({
+      targets: this.enemy,
+      scaleX: 0.8,
+      scaleY: 0.8,
+      duration: 120,
+      yoyo: true,
+      repeat: 3
+    });
+
+    this.time.delayedCall(1000, () => {
+      if (caught) {
+        const caughtMonster = createPartyMonster({
+          ...this.enemyMonster,
+          currentHP: this.enemyHP
+        });
+
+        gameState.party.push(caughtMonster);
+        saveGame();
+
+        this.messageText.setText(`${this.enemyMonster.name} was caught!`);
+
+        this.time.delayedCall(1200, () => {
+          this.scene.start("OverworldScene");
+        });
+      } else {
+        this.messageText.setText(`${this.enemyMonster.name} broke free!`);
+
+        this.time.delayedCall(900, () => {
+          this.enemyTurn();
+        });
+      }
+    });
+  }
+
+  runAway() {
+    if (this.turnLocked) return;
+    this.turnLocked = true;
+
+    this.messageText.setText("You ran away safely!");
+
+    this.time.delayedCall(900, () => {
+      this.playerMonster.currentHP = this.playerHP;
+      gameState.starter = this.playerMonster;
+      gameState.party[0] = this.playerMonster;
+      saveGame();
+      this.scene.start("OverworldScene");
+    });
+  }
+
   enemyTurn() {
     const moveKey = Phaser.Utils.Array.GetRandom(this.enemyMonster.moves);
     const move = MOVES[moveKey];
@@ -529,6 +615,8 @@ class BattleScene extends Phaser.Scene {
     const damage = move.power + Phaser.Math.Between(0, 3);
     this.playerHP = Math.max(0, this.playerHP - damage);
     this.playerMonster.currentHP = this.playerHP;
+    gameState.starter = this.playerMonster;
+    gameState.party[0] = this.playerMonster;
     saveGame();
 
     this.messageText.setText(`${this.enemyMonster.name} used ${move.name}!`);
@@ -549,6 +637,8 @@ class BattleScene extends Phaser.Scene {
 
       this.time.delayedCall(1900, () => {
         this.playerMonster.currentHP = this.playerMonster.maxHP;
+        gameState.starter = this.playerMonster;
+        gameState.party[0] = this.playerMonster;
         gameState.playerX = 2;
         gameState.playerY = 2;
         saveGame();
@@ -586,6 +676,7 @@ class BattleScene extends Phaser.Scene {
       }
 
       gameState.starter = this.playerMonster;
+      gameState.party[0] = this.playerMonster;
       saveGame();
     });
 
