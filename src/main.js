@@ -202,6 +202,12 @@ create() {
 }
 
   drawMap() {
+
+  if (!this.blockedTiles) this.blockedTiles = new Set();
+  if (!this.grassTiles) this.grassTiles = new Set();
+  if (!this.healTiles) this.healTiles = new Set();
+
+  for (let y = 0; y < MAP.length; y++) {
     for (let y = 0; y < MAP.length; y++) {
       for (let x = 0; x < MAP[y].length; x++) {
         const tile = MAP[y][x];
