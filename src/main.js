@@ -1,3 +1,6 @@
+// Monster League RPG - v5
+// Adds starter selection, saved game state, XP, and leveling.
+
 const TILE_SIZE = 32;
 
 const STARTERS = [
@@ -48,6 +51,29 @@ function loadGame() {
   gameState.playerX = loaded.playerX ?? 2;
   gameState.playerY = loaded.playerY ?? 2;
   gameState.starter = loaded.starter ?? null;
+
+  if (gameState.starter) {
+    gameState.starter.xp ??= 0;
+    gameState.starter.xpToNext ??= 20;
+    gameState.starter.level ??= 5;
+    gameState.starter.currentHP ??= gameState.starter.maxHP;
+  }
+}
+
+class BootScene extends Phaser.Scene {
+  constructor() {
+    super("BootScene");
+  }
+
+  create() {
+    loadGame();
+
+    if (gameState.starter) {
+      this.scene.start("OverworldScene");
+    } else {
+      this.scene.start("StarterScene");
+    }
+  }
 }
 
 class StarterScene extends Phaser.Scene {
@@ -102,7 +128,14 @@ class StarterScene extends Phaser.Scene {
   }
 
   chooseStarter(starter) {
-    gameState.starter = { ...starter, level: 5, currentHP: starter.maxHP };
+    gameState.starter = {
+      ...starter,
+      level: 5,
+      xp: 0,
+      xpToNext: 20,
+      currentHP: starter.maxHP
+    };
+
     saveGame();
     this.scene.start("OverworldScene");
   }
@@ -181,13 +214,18 @@ class OverworldScene extends Phaser.Scene {
   }
 
   createUI() {
-    this.infoText = this.add.text(12, 12, `${gameState.starter.name} follows you. Move: WASD / Arrows`, {
-      fontSize: "16px",
-      color: "#ffffff",
-      backgroundColor: "#000000aa",
-      padding: { x: 8, y: 6 },
-      fontFamily: "monospace"
-    });
+    this.infoText = this.add.text(
+      12,
+      12,
+      `${gameState.starter.name} Lv.${gameState.starter.level} | HP ${gameState.starter.currentHP}/${gameState.starter.maxHP} | XP ${gameState.starter.xp}/${gameState.starter.xpToNext}`,
+      {
+        fontSize: "16px",
+        color: "#ffffff",
+        backgroundColor: "#000000aa",
+        padding: { x: 8, y: 6 },
+        fontFamily: "monospace"
+      }
+    );
 
     this.infoText.setScrollFactor(0);
   }
@@ -303,7 +341,28 @@ class BattleScene extends Phaser.Scene {
 
   updateText() {
     this.enemyText.setText(`${this.enemyMonster.name} HP: ${this.enemyHP}/${this.enemyMonster.maxHP}`);
-    this.playerText.setText(`${this.playerMonster.name} HP: ${this.playerHP}/${this.playerMonster.maxHP}`);
+    this.playerText.setText(`${this.playerMonster.name} Lv.${this.playerMonster.level} HP: ${this.playerHP}/${this.playerMonster.maxHP}`);
+  }
+
+  gainXP(amount) {
+    this.playerMonster.xp += amount;
+
+    if (this.playerMonster.xp >= this.playerMonster.xpToNext) {
+      this.playerMonster.xp -= this.playerMonster.xpToNext;
+      this.playerMonster.level += 1;
+      this.playerMonster.xpToNext = Math.floor(this.playerMonster.xpToNext * 1.35);
+
+      this.playerMonster.maxHP += Phaser.Math.Between(3, 6);
+      this.playerMonster.minDamage += 1;
+      this.playerMonster.maxDamage += 1;
+      this.playerMonster.currentHP = this.playerMonster.maxHP;
+      this.playerHP = this.playerMonster.currentHP;
+
+      return true;
+    }
+
+    this.playerMonster.currentHP = this.playerHP;
+    return false;
   }
 
   playerAttack() {
@@ -325,12 +384,23 @@ class BattleScene extends Phaser.Scene {
     });
 
     if (this.enemyHP <= 0) {
+      const xpReward = Phaser.Math.Between(8, 14);
+      const leveledUp = this.gainXP(xpReward);
+
       this.time.delayedCall(900, () => {
-        this.messageText.setText(`${this.enemyMonster.name} fainted!`);
+        this.messageText.setText(`${this.enemyMonster.name} fainted! Gained ${xpReward} XP!`);
+        this.updateText();
       });
 
-      this.time.delayedCall(1700, () => {
-        gameState.starter.currentHP = this.playerHP;
+      this.time.delayedCall(1900, () => {
+        if (leveledUp) {
+          this.messageText.setText(`${this.playerMonster.name} grew to Lv.${this.playerMonster.level}!`);
+          this.updateText();
+        }
+      });
+
+      this.time.delayedCall(3100, () => {
+        gameState.starter = this.playerMonster;
         saveGame();
         this.scene.start("OverworldScene");
       });
@@ -372,6 +442,10 @@ class BattleScene extends Phaser.Scene {
       return;
     }
 
+    this.playerMonster.currentHP = this.playerHP;
+    gameState.starter = this.playerMonster;
+    saveGame();
+
     this.time.delayedCall(500, () => {
       this.battleLocked = false;
       this.messageText.setText("Press F to Fight or R to Run");
@@ -385,26 +459,11 @@ class BattleScene extends Phaser.Scene {
     this.messageText.setText("You ran away safely!");
 
     this.time.delayedCall(1000, () => {
-      gameState.starter.currentHP = this.playerHP;
+      this.playerMonster.currentHP = this.playerHP;
+      gameState.starter = this.playerMonster;
       saveGame();
       this.scene.start("OverworldScene");
     });
-  }
-}
-
-class BootScene extends Phaser.Scene {
-  constructor() {
-    super("BootScene");
-  }
-
-  create() {
-    loadGame();
-
-    if (gameState.starter) {
-      this.scene.start("OverworldScene");
-    } else {
-      this.scene.start("StarterScene");
-    }
   }
 }
 
